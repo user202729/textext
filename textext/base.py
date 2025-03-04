@@ -453,13 +453,15 @@ class TexText(inkex.EffectExtension):
             if isinstance(text, bytes):
                 text = text.decode('utf-8')
 
-            tt_node = self._do_convert_one(text, preamble_file, user_scale_factor, alignment, tex_command)
-
-            # Place new node in document
-            if old_svg_ele is None:
-                self._add_new_node(tt_node, user_scale_factor)
-            else:
+            if old_svg_ele is not None:
+                tt_node = self._do_convert_one(text, preamble_file, user_scale_factor, alignment, tex_command)
                 self._replace_node(old_svg_ele, tt_node, user_scale_factor, alignment, original_scale)
+            else:
+                for piece in text.strip().split("\n\n"):
+                    piece = piece.strip()
+                    if piece:
+                        tt_node = self._do_convert_one(piece, preamble_file, user_scale_factor, alignment, tex_command)
+                        self._add_new_node(tt_node, user_scale_factor)
 
             with logger.debug("Saving global settings"):
                 # -- Save settings
