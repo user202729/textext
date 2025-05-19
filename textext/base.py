@@ -277,7 +277,7 @@ class TexText(inkex.EffectExtension):
                                                 )
 
                 with logger.debug("Run TexText GUI"):
-                    gui_config = asker.ask(save_callback, preview_callback)
+                    gui_config = asker.ask(save_callback, preview_callback, self.export_with_font_matching)
 
                 with logger.debug("Saving global GUI settings"):
                     self.config["gui"] = gui_config
@@ -333,6 +333,103 @@ class TexText(inkex.EffectExtension):
                         converter.tex_to_pdf(tex_executable, text, preamble_file)
                     converter.pdf_to_png(white_bg=white_bg)
                     image_setter(converter.tmp('png'))
+
+    @staticmethod
+    def _convert_node_to_text(node: "TexTextElement") -> inkex.elements.TextElement:
+        text_element = inkex.elements.TextElement()
+        text_element.text = node.get_meta_text()
+        text_element.set('font-size', 0)
+        bb = node.bounding_box()
+        alignment = node.get_meta("alignment", TexText.DEFAULT_ALIGNMENT)
+        v_alignment, h_alignment = alignment.split(" ")
+        if v_alignment == "top":
+            y = bb.top
+            text_element.set('dominant-baseline', 'hanging')
+        elif v_alignment == "bottom":
+            y = bb.bottom
+            text_element.set('dominant-baseline', 'baseline')
+        else:
+            y = bb.center_y
+            text_element.set('dominant-baseline', 'middle')
+        if h_alignment == "left":
+            x = bb.left
+            text_element.set('text-anchor', 'start')
+        elif h_alignment == "right":
+            x = bb.right
+            text_element.set('text-anchor', 'end')
+        else:
+            x = bb.center_x
+            text_element.set('text-anchor', 'middle')
+        text_element.set('x', x)
+        text_element.set('y', y)
+        return text_element
+
+    def export_with_font_matching(self):
+        import copy
+        tree_clone = etree.ElementTree(copy.deepcopy(self.svg))
+        temp_svg = "/tmp/a.svg"
+
+        # generate reference pdf
+        reference_pdf_path = "/tmp/a_reference.pdf"
+        tree_clone.write(temp_svg, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+        inkex.command.inkscape(temp_svg,
+                    '--export-area-page',
+                    '--export-dpi', '300',
+                    '--export-type=pdf',
+                    '--export-filename', reference_pdf_path)
+
+        # modify tree_clone
+        svg_clone = tree_clone.getroot()
+        for node in svg_clone.xpath(
+                './/svg:g[@textext:text]',
+                namespaces={'svg': SVG_NS, 'textext': TEXTEXT_NS}):
+            assert node.tag_name == 'g'
+            node.__class__ = TexTextElement
+            text_element = self._convert_node_to_text(node)
+            parent = node.getparent()
+            index = parent.index(node)
+            parent[index] = text_element
+        tree_clone.write(temp_svg, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+
+        # generate a.pdf and a.pdf_tex
+        pdf_path = "/tmp/a.pdf"  # just a helper pdf that is \includegraphics{} in /tmp/a.pdf_tex
+        inkex.command.inkscape(temp_svg,
+                    '--export-area-page',
+                    '--export-dpi', '300',
+                    '--export-type=pdf',
+                    '--export-latex',
+                    '--export-filename', pdf_path)
+        # the command above assumes inkscape_version_number >= 1.0.0
+        # output to pdf_path and f"{pdf_path}_tex"
+        # cf. https://github.com/gillescastel/inkscape-figures : maybe_recompile_figure
+
+        # generate preview pdf
+        preview_tex_path = "/tmp/a_preview.tex"
+        with open(preview_tex_path, "w") as f:
+            from textwrap import dedent
+            f.write(dedent(r"""
+                    \documentclass{article}
+                    \usepackage{graphicx}
+                    \usepackage{xcolor}
+                    \usepackage[active, tightpage]{preview}
+                    \begin{document}
+                        \begin{preview}
+                            \input{a.pdf_tex}
+                        \end{preview}
+                    \end{document}
+                    """))
+        import subprocess
+        from pathlib import Path
+        subprocess.run(
+                ['latexmk', preview_tex_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=Path(preview_tex_path).parent)
+        # TODO check does not really give the error immediately
+        # TODO use correct preamble
+
+        # diff-pdf --view /tmp/a_reference.pdf /tmp/a_preview.pdf
 
     def _do_convert_one(self, text: str, preamble_file, user_scale_factor, alignment, tex_command):
         """

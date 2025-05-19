@@ -185,7 +185,7 @@ class AskText(object):
         self._cancel_button = None
         self._window = None
 
-    def ask(self, callback, preview_callback=None):
+    def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
         """
         Present the GUI for entering LaTeX code and setting some options
         :param callback: A callback function (basically, what to do with the values from the GUI)
@@ -271,7 +271,7 @@ class AskTextTK(AskText):
                 valid = False
         return valid
 
-    def ask(self, callback, preview_callback=None):
+    def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
         self.callback = callback
 
         self._root = Tk.Tk()
@@ -535,7 +535,8 @@ class AskTextGTKSource(AskText):
         self._preamble_delete_btn = None
 
         self.buffer_actions = [
-            ('Open', Gtk.STOCK_OPEN, '_Open', '<control>O', 'Open a file', self.open_file_cb)
+            ('Open', Gtk.STOCK_OPEN, '_Open', '<control>O', 'Open a file', self.open_file_cb),
+            ('ExportWithFontMatching', None, '_Export with font matching (exclude current change)', None, None, lambda _, text_buffer: self._export_with_font_matching_cb()),
         ]
 
         if TOOLKIT == GTKSOURCEVIEW:
@@ -626,6 +627,7 @@ class AskTextGTKSource(AskText):
           <menubar name='MainMenu'>
             <menu action='FileMenu'>
               <menuitem action='Open'/>
+              <menuitem action='ExportWithFontMatching'/>
             </menu>
             <menu action='ViewMenu'>
               <menu action='FontSize'>
@@ -1311,7 +1313,8 @@ class AskTextGTKSource(AskText):
 
         return window
 
-    def ask(self, callback, preview_callback=None):
+    def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
+        self._export_with_font_matching_cb = export_with_font_matching_callback
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", module="asktext")
             warnings.filterwarnings("ignore", category=DeprecationWarning)
