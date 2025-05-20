@@ -366,6 +366,9 @@ class TexText(inkex.EffectExtension):
         text_element = inkex.elements.TextElement()
         text_element.text = node.get_meta_text()
         text_element.set('font-size', 0)
+        text_element.set('line-height', 1.2)
+        # actually this should be set depends on the user's configuration in preamble but that's too hard
+        # the default is f@size=10 and baselineskip=12pt
         bb = node.bounding_box()
         alignment = node.get_meta_alignment()
         v_alignment, h_alignment = alignment.split(" ")
