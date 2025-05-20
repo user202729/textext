@@ -172,8 +172,13 @@ class TexText(inkex.EffectExtension):
             default=self.DEFAULT_ALIGNMENT
         )
 
-        self.arg_parser.add_argument(
+        command_group = self.arg_parser.add_mutually_exclusive_group()
+        command_group.add_argument(
             "--recompile-all-entries",
+            action="store_true"
+        )
+        command_group.add_argument(
+            "--export-pdf-latex",
             action="store_true"
         )
 
@@ -209,6 +214,10 @@ class TexText(inkex.EffectExtension):
 
             if self.options.recompile_all_entries:
                 self._recompile_all_entries()
+                return
+
+            if self.options.export_pdf_latex:
+                self.export_with_font_matching()
                 return
 
             # Find root element
@@ -402,13 +411,20 @@ class TexText(inkex.EffectExtension):
                 namespaces={'svg': SVG_NS, 'textext': TEXTEXT_NS})
 
     def export_with_font_matching(self):
+        """
+        This can be used from the GTK GUI or the command-line::
+
+            python3 /path/to/textext/__main__.py --export-pdf-latex < file.svg
+
+        For now, writes to ``/tmp/a.pdf`` and ``/tmp/a.pdf_tex``.
+        """
         import copy
         tree_clone = copy.deepcopy(self.document)
         temp_svg = "/tmp/a.svg"
 
         # generate reference pdf
         reference_pdf_path = "/tmp/a_reference.pdf"
-        tree_clone.write(temp_svg, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+        self.document.write(temp_svg, pretty_print=True, xml_declaration=True, encoding='UTF-8')
         inkex.command.inkscape(temp_svg,
                     '--export-area-page',
                     '--export-dpi', '300',
