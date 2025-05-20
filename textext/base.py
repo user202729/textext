@@ -379,14 +379,16 @@ class TexText(inkex.EffectExtension):
         # but that information is lost)
         y = bb.top + float(node.get_meta("top_to_baseline"))
         text_element.set('dominant-baseline', 'hanging')
+        tex_box_left = bb.left - float(node.get_meta("left_to_tex_box_left"))
+        tex_box_right = bb.right + float(node.get_meta("right_to_tex_box_right"))
         if h_alignment == "left":
-            x = bb.left
+            x = tex_box_left
             text_element.set('text-anchor', 'start')
         elif h_alignment == "right":
-            x = bb.right
+            x = tex_box_right
             text_element.set('text-anchor', 'end')
         else:
-            x = bb.center_x
+            x = (tex_box_left + tex_box_right) / 2
             text_element.set('text-anchor', 'middle')
         text_element.set('x', x)
         text_element.set('y', y)
@@ -658,12 +660,15 @@ class TexToPdfConverter:
     DOCUMENT_TEMPLATE = r"""
     %s
     \usepackage[active, tightpage]{preview}
+    \usepackage{varwidth}
     \setlength{\PreviewBorder}{0pt}
     \begin{document}
     \begin{preview}
     {
-        \setbox0=\vtop{
-            %s
+        \setbox0=\hbox{%%
+            \begin{varwidth}[t]{\hsize}
+                %s
+            \end{varwidth}%%
         }
         \dimen0=\ht0
         \ifdim\dp0>\dimen0
@@ -875,8 +880,12 @@ class TexTextElement(inkex.Group):
         self.transform.add_scale(root.uutounit("1{}".format(root.unit), document_unit))
 
         # Useful for _convert_node_to_text later
-        self.set_meta("top_to_baseline",
-                      str(self.uutounit(root.get("height"), document_unit) / 2 - self.bounding_box().top))
+        document_height = self.uutounit(root.get("height"), document_unit)
+        document_width = self.uutounit(root.get("width"), document_unit)
+        bb = self.bounding_box()
+        self.set_meta("top_to_baseline", str(document_height / 2 - bb.top))
+        self.set_meta("left_to_tex_box_left", str(bb.left))
+        self.set_meta("right_to_tex_box_right", str(document_width - bb.right))
 
     @staticmethod
     def _expand_defs(root):
