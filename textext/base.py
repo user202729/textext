@@ -374,7 +374,7 @@ class TexText(inkex.EffectExtension):
         # because it depends on the height of the box
         # (to be completely accurate, the y should be at the baseline of the first line,
         # but that information is lost)
-        y = bb.top + 2
+        y = bb.top + float(node.get_meta("top_to_baseline"))
         text_element.set('dominant-baseline', 'hanging')
         if h_alignment == "left":
             x = bb.left
@@ -442,6 +442,7 @@ class TexText(inkex.EffectExtension):
                     \usepackage{graphicx}
                     \usepackage{xcolor}
                     \usepackage[active, tightpage]{preview}
+                    \setlength{\PreviewBorder}{0pt}
                     \begin{document}
                         \begin{preview}
                             \input{a.pdf_tex}
@@ -653,11 +654,26 @@ class TexToPdfConverter:
     DEFAULT_DOCUMENT_CLASS=r"\documentclass{article}"
     DOCUMENT_TEMPLATE = r"""
     %s
-    \pagestyle{empty}
+    \usepackage[active, tightpage]{preview}
+    \setlength{\PreviewBorder}{0pt}
     \begin{document}
-    %s
+    \begin{preview}
+    {
+        \setbox0=\vtop{
+            %s
+        }
+        \dimen0=\ht0
+        \ifdim\dp0>\dimen0
+            \dimen0=\dp0
+        \fi
+        \vrule height \dimen0 depth \dimen0 width 0pt\relax
+        \box0
+    }
+    \end{preview}
     \end{document}
     """
+    # the logic ensures that the baseline of the first text line is
+    # in the middle of the document
 
     LATEX_OPTIONS = ['-interaction=nonstopmode',
                      '-halt-on-error']
@@ -768,7 +784,7 @@ class TexToPdfConverter:
         kwargs["pages"] = 1
         kwargs["export_type"] = "svg"
         kwargs["export_text_to_path"] = True
-        kwargs["export_area_drawing"] = True
+        kwargs["export_area_drawing"] = False  # to compute top_to_baseline
 
         ixc.inkscape(self.tmp('pdf'), **kwargs)
 
@@ -854,6 +870,10 @@ class TexTextElement(inkex.Group):
         # We scale it here such that its size is correct in the document units
         # (Usually pt returned from poppler to mm in the main document)
         self.transform.add_scale(root.uutounit("1{}".format(root.unit), document_unit))
+
+        # Useful for _convert_node_to_text later
+        self.set_meta("top_to_baseline",
+                      str(self.uutounit(root.get("height"), document_unit) / 2 - self.bounding_box().top))
 
     @staticmethod
     def _expand_defs(root):
