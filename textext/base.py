@@ -342,15 +342,11 @@ class TexText(inkex.EffectExtension):
         bb = node.bounding_box()
         alignment = node.get_meta("alignment", TexText.DEFAULT_ALIGNMENT)
         v_alignment, h_alignment = alignment.split(" ")
-        if v_alignment == "top":
-            y = bb.top
-            text_element.set('dominant-baseline', 'hanging')
-        elif v_alignment == "bottom":
-            y = bb.bottom
-            text_element.set('dominant-baseline', 'baseline')
-        else:
-            y = bb.center_y
-            text_element.set('dominant-baseline', 'middle')
+        # v_alignment not supported, see https://github.com/textext/textext/issues/448
+        # not sure what unit the "2" is in actually, and also it is not really accurate
+        # because it depends on the height of the box
+        y = bb.top + 2
+        text_element.set('dominant-baseline', 'hanging')
         if h_alignment == "left":
             x = bb.left
             text_element.set('text-anchor', 'start')
