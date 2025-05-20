@@ -173,16 +173,43 @@ class TexText(inkex.EffectExtension):
         )
 
         self.arg_parser.add_argument(
+            "--recompile-all-entries",
+            action="store_true"
+        )
+
+        self.arg_parser.add_argument(
             "--tex_command",
             type=str,
             default=self.DEFAULT_TEXCMD
         )
+
+    def _recompile_all_entries(self):
+        """
+        Mutate ``self.svg`` to recompile all textext entries.
+        This can be invoked from command-line as::
+
+            python3 /path/to/textext/__main__.py --recompile-all-entries        > edited.svg < original.svg
+            python3 /path/to/textext/__main__.py --recompile-all-entries --output edited.svg < original.svg
+
+        In the first form ``edited.svg`` must not be the same as ``original.svg``,
+        in the second form it is probably fine (although do make a backup).
+        """
+        for node in self.find_all_textext_nodes(self.svg):
+            node.__class__ = TexTextElement
+            text, preamble, scale = node.get_all_info()
+            alignment = node.get_meta_alignment()
+            new_node = self._do_convert_one(text, preamble, scale, alignment, self.options.tex_command)
+            self._replace_node(node, new_node, scale, alignment, scale)
 
     def effect(self):
         """Perform the effect: create/modify TexText objects"""
         from .asktext import AskTextDefault
 
         with logger.debug("TexText.effect"):
+
+            if self.options.recompile_all_entries:
+                self._recompile_all_entries()
+                return
 
             # Find root element
             old_svg_ele, text, preamble_file, current_scale = self.get_old()
@@ -215,7 +242,7 @@ class TexText(inkex.EffectExtension):
                     logger.debug("Adjust scale factor to account transformations in inkscape")
                     current_scale *= old_svg_ele.get_jacobian_sqrt() / jac_sqrt
 
-                alignment = old_svg_ele.get_meta("alignment", TexText.DEFAULT_ALIGNMENT)
+                alignment = old_svg_ele.get_meta_alignment()
 
                 current_tex_command = old_svg_ele.get_meta("texconverter", current_tex_command)
 
@@ -340,11 +367,13 @@ class TexText(inkex.EffectExtension):
         text_element.text = node.get_meta_text()
         text_element.set('font-size', 0)
         bb = node.bounding_box()
-        alignment = node.get_meta("alignment", TexText.DEFAULT_ALIGNMENT)
+        alignment = node.get_meta_alignment()
         v_alignment, h_alignment = alignment.split(" ")
         # v_alignment not supported, see https://github.com/textext/textext/issues/448
         # not sure what unit the "2" is in actually, and also it is not really accurate
         # because it depends on the height of the box
+        # (to be completely accurate, the y should be at the baseline of the first line,
+        # but that information is lost)
         y = bb.top + 2
         text_element.set('dominant-baseline', 'hanging')
         if h_alignment == "left":
@@ -360,9 +389,16 @@ class TexText(inkex.EffectExtension):
         text_element.set('y', y)
         return text_element
 
+    @staticmethod
+    def find_all_textext_nodes(svg):
+        # svg: has the same type as self.svg
+        return svg.xpath(
+                './/svg:g[@textext:text]',
+                namespaces={'svg': SVG_NS, 'textext': TEXTEXT_NS})
+
     def export_with_font_matching(self):
         import copy
-        tree_clone = etree.ElementTree(copy.deepcopy(self.svg))
+        tree_clone = copy.deepcopy(self.document)
         temp_svg = "/tmp/a.svg"
 
         # generate reference pdf
@@ -376,9 +412,7 @@ class TexText(inkex.EffectExtension):
 
         # modify tree_clone
         svg_clone = tree_clone.getroot()
-        for node in svg_clone.xpath(
-                './/svg:g[@textext:text]',
-                namespaces={'svg': SVG_NS, 'textext': TEXTEXT_NS}):
+        for node in self.find_all_textext_nodes(svg_clone):
             assert node.tag_name == 'g'
             node.__class__ = TexTextElement
             text_element = self._convert_node_to_text(node)
@@ -587,12 +621,7 @@ class TexText(inkex.EffectExtension):
             node.__class__ = TexTextElement
 
             try:
-                text = node.get_meta_text()
-                preamble = node.get_meta('preamble')
-                scale = float(node.get_meta('scale', 1.0))
-
-                return node, text, preamble, scale
-
+                return node, *node.get_all_info()
             except (TypeError, AttributeError) as ignored:
                 pass
 
@@ -885,6 +914,9 @@ class TexTextElement(inkex.Group):
         else:
             return encoded_text
 
+    def get_meta_alignment(self):
+        return self.get_meta('alignment', TexText.DEFAULT_ALIGNMENT)
+
     def get_meta(self, key, default=None):
         try:
             ns_key = '{{{ns}}}{key}'.format(ns=TEXTEXT_NS, key=key)
@@ -896,6 +928,12 @@ class TexTextElement(inkex.Group):
             if default is not None:
                 return default
             raise attr_error
+
+    def get_all_info(self):
+        text = self.get_meta_text()
+        preamble = self.get_meta('preamble')
+        scale = float(self.get_meta('scale', 1.0))
+        return text, preamble, scale
 
     def align_to_node(self, ref_node, alignment, relative_scale):
         """
