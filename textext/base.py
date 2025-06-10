@@ -677,9 +677,9 @@ class TexText(inkex.EffectExtension):
         for positioning the node correctly.
         """
         parent = old_node.getparent()
+        index = parent.index(old_node)
         old_id = old_node.get_id()
-        parent.remove(old_node)
-        parent.append(new_node)
+        parent[index] = new_node
         new_node.set_id(old_id)
         self.copy_style(old_node, new_node)
 
