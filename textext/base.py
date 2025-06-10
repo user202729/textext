@@ -201,9 +201,9 @@ class TexText(inkex.EffectExtension):
         """
         for node in self.find_all_textext_nodes(self.svg):
             node.__class__ = TexTextElement
-            text, preamble, scale = node.get_all_info()
+            text, preamble_file, scale = node.get_all_info()
             alignment = node.get_meta_alignment()
-            new_node = self._do_convert_one(text, preamble, scale, alignment, self.options.tex_command)
+            new_node = self._do_convert_one(text, preamble_file, scale, alignment, self.options.tex_command)
             self._replace_node(node, new_node, scale, alignment, scale)
 
     def effect(self):
@@ -433,9 +433,11 @@ class TexText(inkex.EffectExtension):
 
         # modify tree_clone
         svg_clone = tree_clone.getroot()
+        preamble_paths = set()
         for node in self.find_all_textext_nodes(svg_clone):
             assert node.tag_name == 'g'
             node.__class__ = TexTextElement
+            preamble_paths.add(node.get_meta('preamble'))
             text_element = self._convert_node_to_text(node)
             parent = node.getparent()
             index = parent.index(node)
@@ -444,22 +446,38 @@ class TexText(inkex.EffectExtension):
 
         # generate a.pdf and a.pdf_tex
         pdf_path = "/tmp/a.pdf"  # just a helper pdf that is \includegraphics{} in /tmp/a.pdf_tex
+        from pathlib import Path
+        Path(pdf_path).unlink(missing_ok=True)
         inkex.command.inkscape(temp_svg,
                     '--export-area-page',
                     '--export-dpi', '300',
                     '--export-type=pdf',
                     '--export-latex',
                     '--export-filename', pdf_path)
+        assert Path(pdf_path).is_file()
         # the command above assumes inkscape_version_number >= 1.0.0
         # output to pdf_path and f"{pdf_path}_tex"
         # cf. https://github.com/gillescastel/inkscape-figures : maybe_recompile_figure
+
+        if len(preamble_paths) > 1:
+            preamble, preamble_path = max(
+                    [(Path(p).read_text(encoding='utf-8', errors='replace'), p) for p in preamble_paths],
+                    key=len
+                    )
+            logger.warning(f"multiple preamble files found: {preamble_paths}, pick {preamble_path}")
+        elif len(preamble_paths) == 1:
+            preamble_path = next(iter(preamble_paths))
+            preamble = Path(preamble_path).read_text(encoding='utf-8', errors='replace')
+        else:
+            preamble_path = None
+            preamble = ""
 
         # generate preview pdf
         preview_tex_path = "/tmp/a_preview.tex"
         with open(preview_tex_path, "w") as f:
             from textwrap import dedent
-            f.write(dedent(r"""
-                    \documentclass{article}
+            f.write(TexToPdfConverter._add_default_document_class_if_necessary(preamble) +
+                    dedent(r"""
                     \usepackage{graphicx}
                     \usepackage{xcolor}
                     \usepackage[active, tightpage]{preview}
@@ -472,14 +490,15 @@ class TexText(inkex.EffectExtension):
                     """))
         import subprocess
         from pathlib import Path
-        subprocess.run(
-                ['latexmk', preview_tex_path],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+        proc = subprocess.run(
+                ['latexmk', '-g', preview_tex_path],  # -g is workaround to debug issues with the code generation
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 cwd=Path(preview_tex_path).parent)
+        if proc.returncode != 0:
+            sys.stderr.buffer.write(proc.stdout)
+            raise RuntimeError(f"compilation error")
         # TODO check does not really give the error immediately
-        # TODO use correct preamble
 
         # diff-pdf --view /tmp/a_reference.pdf /tmp/a_preview.pdf
 
@@ -725,6 +744,12 @@ class TexToPdfConverter:
         """
         return self.tmp_base + '.' + suffix
 
+    @staticmethod
+    def _add_default_document_class_if_necessary(preamble):
+        if not _contains_document_class(preamble):
+            return TexToPdfConverter.DEFAULT_DOCUMENT_CLASS + preamble
+        return preamble
+
     def tex_to_pdf(self, tex_command, latex_text, preamble_file):
         """
         Create a PDF file from latex text
@@ -739,9 +764,7 @@ class TexToPdfConverter:
                 with open(preamble_file, 'r') as f:
                     preamble += f.read()
 
-            # Add default document class to preamble if necessary
-            if not _contains_document_class(preamble):
-                preamble = self.DEFAULT_DOCUMENT_CLASS + preamble
+            TexToPdfConverter._add_default_document_class_if_necessary(preamble)
 
             # Options pass to LaTeX-related commands
 
@@ -979,9 +1002,9 @@ class TexTextElement(inkex.Group):
 
     def get_all_info(self):
         text = self.get_meta_text()
-        preamble = self.get_meta('preamble')
+        preamble_file = self.get_meta('preamble')
         scale = float(self.get_meta('scale', 1.0))
-        return text, preamble, scale
+        return text, preamble_file, scale
 
     def align_to_node(self, ref_node, alignment, relative_scale):
         """
