@@ -437,6 +437,8 @@ class TexText(inkex.EffectExtension):
         for node in self.find_all_textext_nodes(svg_clone):
             assert node.tag_name == 'g'
             node.__class__ = TexTextElement
+            if "% do not bring to front" in node.get_meta('text'):
+                continue
             preamble_paths.add(node.get_meta('preamble'))
             text_element = self._convert_node_to_text(node)
             parent = node.getparent()
