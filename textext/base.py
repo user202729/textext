@@ -183,6 +183,11 @@ class TexText(inkex.EffectExtension):
         )
 
         self.arg_parser.add_argument(
+            "--recompile-all-entries",
+            action="store_true"
+        )
+
+        self.arg_parser.add_argument(
             "--tex_command",
             type=str,
             default=self.DEFAULT_TEXCMD
@@ -334,6 +339,14 @@ class TexText(inkex.EffectExtension):
                                 self.options.tex_command,
                                 original_scale=current_scale
                                 )
+
+    @staticmethod
+    def find_all_textext_nodes(svg):
+        # svg: has the same type as self.svg
+        return svg.xpath(
+                './/svg:g[@textext:text]',
+                namespaces={'svg': SVG_NS, 'textext': TEXTEXT_NS})
+
 
     def preview_convert(self, text, preamble_file, image_setter, tex_command, white_bg):
         """
@@ -623,15 +636,17 @@ class TexText(inkex.EffectExtension):
             if isinstance(text, bytes):
                 text = text.decode('utf-8')
 
-            if old_svg_ele is not None:
-                tt_node = self._do_convert_one(text, preamble_file, user_scale_factor, alignment, tex_command)
-                self._replace_node(old_svg_ele, tt_node, user_scale_factor, alignment, original_scale)
-            else:
+
+            # Place new node in document
+            if old_svg_ele is None:
                 for piece in text.strip().split("\n\n"):
                     piece = piece.strip()
                     if piece:
                         tt_node = self._do_convert_one(piece, preamble_file, user_scale_factor, alignment, tex_command)
                         self._add_new_node(tt_node, user_scale_factor)
+            else:
+                tt_node = self._do_convert_one(text, preamble_file, user_scale_factor, alignment, tex_command)
+                self._replace_node(old_svg_ele, tt_node, user_scale_factor, alignment, original_scale)
 
             with logger.debug("Saving global settings"):
                 # -- Save settings
