@@ -102,7 +102,7 @@ class AskText(object):
         self._cancel_button = None
         self._window = None
 
-    def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
+    def ask(self, callback, preview_callback=None):
         """
         Present the GUI for entering LaTeX code and setting some options
         :param callback: A callback function (basically, what to do with the values from the GUI)
@@ -203,7 +203,7 @@ def load_asktext_tk():
                     valid = False
             return valid
 
-        def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
+        def ask(self, callback, preview_callback=None):
             self.callback = callback
 
             self._root = Tk.Tk()
@@ -532,8 +532,7 @@ def load_asktext_gtk(use_gtk_source=None):
             self._preamble_delete_btn = None
 
             self.buffer_actions = [
-                ('Open', Gtk.STOCK_OPEN, '_Open', '<control>O', 'Open a file', self.open_file_cb),
-                ('ExportWithFontMatching', None, '_Export with font matching (exclude current change)', None, None, lambda _, text_buffer: self._export_with_font_matching_cb()),
+                ('Open', Gtk.STOCK_OPEN, '_Open', '<control>O', 'Open a file', self.open_file_cb)
             ]
 
             if GtkSource is not None:
@@ -624,7 +623,6 @@ def load_asktext_gtk(use_gtk_source=None):
               <menubar name='MainMenu'>
                 <menu action='FileMenu'>
                   <menuitem action='Open'/>
-                  <menuitem action='ExportWithFontMatching'/>
                 </menu>
                 <menu action='ViewMenu'>
                   <menu action='FontSize'>
@@ -1310,8 +1308,7 @@ def load_asktext_gtk(use_gtk_source=None):
 
             return window
 
-        def ask(self, callback, preview_callback=None, export_with_font_matching_callback=None):
-            self._export_with_font_matching_cb = export_with_font_matching_callback
+        def ask(self, callback, preview_callback=None):
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", module="asktext")
                 warnings.filterwarnings("ignore", category=DeprecationWarning)
