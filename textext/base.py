@@ -183,11 +183,6 @@ class TexText(inkex.EffectExtension):
         )
 
         self.arg_parser.add_argument(
-            "--recompile-all-entries",
-            action="store_true"
-        )
-
-        self.arg_parser.add_argument(
             "--tex_command",
             type=str,
             default=self.DEFAULT_TEXCMD
@@ -936,6 +931,8 @@ class TexTextElement(inkex.Group):
         self.transform.add_scale(root.uutounit("1{}".format(root.unit), document_unit))
 
         # Useful for _convert_node_to_text later
+        # this "document" refer to the document produced by compiling this single node,
+        # not the svg file the user is editing (which this node will be added to)
         document_height = self.uutounit(root.get("height"), document_unit)
         document_width = self.uutounit(root.get("width"), document_unit)
         bb = self.bounding_box()
